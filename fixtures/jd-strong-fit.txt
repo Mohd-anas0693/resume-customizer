@@ -1,0 +1,32 @@
+Backend Engineer
+Northwind Systems — Pune, India (hybrid)
+
+About the role
+We are hiring a Backend Engineer to work on the services behind our billing and
+reporting products. You will own API endpoints end to end, from the database
+schema through to the HTTP contract, and work closely with two front-end
+engineers who consume what you build.
+
+What you'll do
+- Build and maintain REST APIs in Node.js and TypeScript.
+- Design and evolve PostgreSQL schemas, including writing and reviewing migrations.
+- Write unit and integration tests; we expect new code to arrive with tests.
+- Review pull requests from other engineers and keep the codebase tidy.
+- Help run the services you build, with support from our platform team.
+
+Requirements
+- Minimum 2 years of professional experience building backend web services.
+- Strong JavaScript and TypeScript. We write all new services in TypeScript.
+- Hands-on experience with Node.js, ideally with Express or a similar framework.
+- Working knowledge of SQL and relational schema design; PostgreSQL preferred.
+- Experience writing automated tests (we use Jest).
+- Comfortable with Git-based workflows and code review.
+
+Nice to have
+- Docker, and some familiarity with container-based deployment.
+- Exposure to React, so you can debug across the stack.
+- Experience with CI/CD pipelines.
+
+What we offer
+Hybrid working from our Pune office, a learning budget, and health cover for you
+and your dependants.

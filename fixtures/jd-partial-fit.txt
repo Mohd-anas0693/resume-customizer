@@ -1,0 +1,30 @@
+Senior Platform Engineer
+Harbor Cloud — Bengaluru, India (on-site 3 days/week)
+
+The team
+Harbor Cloud runs the internal developer platform used by every product team in
+the company. We own the Kubernetes clusters, the deployment tooling, and the
+observability stack that around 180 engineers depend on daily.
+
+What you'll do
+- Operate and extend our multi-tenant Kubernetes platform.
+- Write platform tooling and controllers in Go.
+- Manage all infrastructure as code with Terraform.
+- Own the CI/CD pipelines that ship roughly 300 deploys a week.
+- Define SLOs and build dashboards and alerts in Prometheus and Grafana.
+- Act as a technical lead: mentor two or three engineers and set direction for
+  the platform roadmap.
+
+Requirements
+- 6+ years of software or infrastructure engineering experience, including at
+  least 3 years running Kubernetes in production.
+- Strong Go. Most of our tooling is written in Go and you will be reviewing it.
+- Deep Terraform experience; you should be comfortable owning module design.
+- Solid understanding of Linux networking and container runtimes.
+- Experience as a technical lead or senior engineer on a platform team.
+- PostgreSQL and Node.js familiarity is useful, since some legacy services are
+  Node-based and we still operate their databases.
+
+Nice to have
+- Prometheus, Grafana, or another observability stack at scale.
+- Experience with service meshes.

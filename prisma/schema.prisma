@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Resume {
+  id        String   @id @default(cuid())
+  label     String   @default("Master Resume")
+  data      String // Resume JSON
+  isMaster  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  jobs      Job[]
+}
+
+model Job {
+  id         String   @id @default(cuid())
+  resumeId   String
+  resume     Resume   @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  title      String   @default("Untitled role")
+  company    String?
+  jdText     String
+  jdUrl      String?
+  analysis   String? // JobAnalysis JSON
+  fitReport  String? // FitReport JSON
+  skipped    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  versions   TailoredVersion[]
+}
+
+model TailoredVersion {
+  id          String   @id @default(cuid())
+  jobId       String
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  label       String   @default("Tailored")
+  data        String // Resume JSON
+  changes     String // Change[] JSON
+  scoreBefore Int
+  scoreAfter  Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// Single-row key/value store for app settings (currently the model choices).
+model AppSetting {
+  key       String   @id
+  value     String // JSON
+  updatedAt DateTime @updatedAt
+}
