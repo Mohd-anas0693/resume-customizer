@@ -17,7 +17,11 @@ export const PROVIDERS: Record<ProviderId, AiProvider> = {
   google: googleProvider,
 };
 
-export const PROVIDER_IDS: ProviderId[] = ["anthropic", "openai", "google"];
+/**
+ * Display and preference order. The first provider with a key becomes the
+ * default, so OpenAI is used unless it has no key; no provider is required.
+ */
+export const PROVIDER_IDS: ProviderId[] = ["openai", "anthropic", "google"];
 
 export function getProvider(id: ProviderId): AiProvider {
   const provider = PROVIDERS[id];
@@ -54,32 +58,36 @@ export const TASK_HINT: Record<AiTask, string> = {
 export const TASKS: AiTask[] = ["parse", "analyze", "fit", "tailor"];
 
 /**
+ * The provider the defaults are built from: the first one in PROVIDER_IDS that
+ * has a key, or the first overall when nothing is configured yet (so the
+ * settings page still has something coherent to show).
+ *
+ * PROVIDER_DEFAULT overrides the order, e.g. PROVIDER_DEFAULT=anthropic.
+ */
+export function preferredProvider(): ProviderId {
+  const requested = process.env.PROVIDER_DEFAULT as ProviderId | undefined;
+  if (requested && PROVIDER_IDS.includes(requested) && PROVIDERS[requested].isConfigured()) {
+    return requested;
+  }
+  const available = configuredProviders();
+  if (available.length > 0) return available[0];
+  return requested && PROVIDER_IDS.includes(requested) ? requested : PROVIDER_IDS[0];
+}
+
+/**
  * Defaults put the cheapest capable model on the mechanical work and the
- * strongest on tailoring. They use whichever provider has a key, preferring
- * Anthropic since that is what the app was built against.
+ * strongest on tailoring, using whichever provider is preferred. Every
+ * provider supplies its own ladder, so no provider is special-cased here.
  */
 export function defaultModelSettings(): ModelSettings {
-  const available = configuredProviders();
-  const preferred: ProviderId = available.includes("anthropic")
-    ? "anthropic"
-    : (available[0] ?? "anthropic");
+  const provider = preferredProvider();
+  const tiers = getProvider(provider).tiers();
 
-  if (preferred === "anthropic") {
-    const envOverride = process.env.ANTHROPIC_MODEL;
-    const cheap = envOverride || "claude-haiku-5-5";
-    const mid = envOverride || "claude-sonnet-5-5";
-    const best = envOverride || "claude-opus-5-5";
-    return {
-      parse: { provider: "anthropic", model: cheap },
-      analyze: { provider: "anthropic", model: mid },
-      fit: { provider: "anthropic", model: mid },
-      tailor: { provider: "anthropic", model: best },
-    };
-  }
-
-  // For the other providers we don't hardcode a tier ladder, since their
-  // line-ups change; use the provider's single default everywhere.
-  const model = getProvider(preferred).defaultModel();
-  const choice: ModelChoice = { provider: preferred, model };
-  return { parse: choice, analyze: choice, fit: choice, tailor: choice };
+  const choice = (model: string): ModelChoice => ({ provider, model });
+  return {
+    parse: choice(tiers.cheap),
+    analyze: choice(tiers.balanced),
+    fit: choice(tiers.balanced),
+    tailor: choice(tiers.best),
+  };
 }

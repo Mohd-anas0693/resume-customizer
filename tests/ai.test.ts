@@ -1,7 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { callStructured } from "@/lib/ai";
 import { stripNulls, toStrictJsonSchema, type JsonSchema } from "@/lib/ai/json-schema";
-import { configuredProviders, defaultModelSettings, getProvider, PROVIDER_IDS, PROVIDERS, TASK_PROFILE } from "@/lib/ai/registry";
+import {
+  configuredProviders,
+  defaultModelSettings,
+  getProvider,
+  preferredProvider,
+  PROVIDER_IDS,
+  PROVIDERS,
+  TASK_PROFILE,
+} from "@/lib/ai/registry";
 import { AiConfigError, AiValidationError, ModelSettingsSchema, type AiProvider } from "@/lib/ai/types";
 import { fitJudgmentJsonSchema, jobAnalysisJsonSchema, resumeJsonSchema, tailorJsonSchema } from "@/lib/tool-schemas";
 import { z } from "zod";
@@ -140,7 +148,15 @@ describe("provider registry", () => {
       expect(provider.id).toBe(id);
       expect(provider.label.length).toBeGreaterThan(0);
       expect(provider.envVar).toMatch(/API_KEY$/);
+      const tiers = provider.tiers();
+      expect(tiers.cheap).toBeTruthy();
+      expect(tiers.balanced).toBeTruthy();
+      expect(tiers.best).toBeTruthy();
     }
+  });
+
+  it("lists OpenAI first, so it is the default when several keys are set", () => {
+    expect(PROVIDER_IDS[0]).toBe("openai");
   });
 
   it("throws on an unknown provider id", () => {
@@ -171,6 +187,8 @@ describe("defaultModelSettings", () => {
     delete process.env.OPENAI_MODEL;
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_API_KEY;
+    delete process.env.GEMINI_MODEL;
+    delete process.env.PROVIDER_DEFAULT;
   });
 
   afterEach(() => {
@@ -181,34 +199,74 @@ describe("defaultModelSettings", () => {
     expect(ModelSettingsSchema.safeParse(defaultModelSettings()).success).toBe(true);
   });
 
+  it("defaults to OpenAI when it has a key", () => {
+    process.env.OPENAI_API_KEY = "test";
+    const settings = defaultModelSettings();
+    expect(preferredProvider()).toBe("openai");
+    expect(new Set(Object.values(settings).map((c) => c.provider))).toEqual(new Set(["openai"]));
+  });
+
   it("puts a cheap model on parsing and the strongest on tailoring", () => {
+    process.env.OPENAI_API_KEY = "test";
+    const settings = defaultModelSettings();
+    expect(settings.parse.model).toBe("gpt-5.5-mini");
+    expect(settings.tailor.model).toBe("gpt-5.5");
+  });
+
+  it("uses Claude's ladder when Anthropic is the configured provider", () => {
     process.env.ANTHROPIC_API_KEY = "test";
     const settings = defaultModelSettings();
+    expect(preferredProvider()).toBe("anthropic");
     expect(settings.parse.model).toBe("claude-haiku-5-5");
+    expect(settings.analyze.model).toBe("claude-sonnet-5-5");
     expect(settings.tailor.model).toBe("claude-opus-5-5");
   });
 
-  it("honours ANTHROPIC_MODEL as an override for every task", () => {
-    process.env.ANTHROPIC_API_KEY = "test";
-    process.env.ANTHROPIC_MODEL = "claude-sonnet-5-5";
+  it("uses Gemini's ladder when only Google is configured", () => {
+    process.env.GEMINI_API_KEY = "test";
     const settings = defaultModelSettings();
-    expect(new Set(Object.values(settings).map((c) => c.model))).toEqual(
-      new Set(["claude-sonnet-5-5"]),
+    expect(settings.parse.model).toBe("gemini-3-flash");
+    expect(settings.tailor.model).toBe("gemini-3-pro");
+  });
+
+  it("prefers OpenAI when more than one key is set", () => {
+    process.env.ANTHROPIC_API_KEY = "test";
+    process.env.OPENAI_API_KEY = "test";
+    process.env.GEMINI_API_KEY = "test";
+    expect(defaultModelSettings().tailor.provider).toBe("openai");
+  });
+
+  it("honours PROVIDER_DEFAULT when that provider has a key", () => {
+    process.env.ANTHROPIC_API_KEY = "test";
+    process.env.OPENAI_API_KEY = "test";
+    process.env.PROVIDER_DEFAULT = "anthropic";
+    expect(preferredProvider()).toBe("anthropic");
+  });
+
+  it("ignores PROVIDER_DEFAULT when that provider has no key", () => {
+    process.env.OPENAI_API_KEY = "test";
+    process.env.PROVIDER_DEFAULT = "google";
+    expect(preferredProvider()).toBe("openai");
+  });
+
+  it("ignores a nonsense PROVIDER_DEFAULT", () => {
+    process.env.ANTHROPIC_API_KEY = "test";
+    process.env.PROVIDER_DEFAULT = "mistral";
+    expect(preferredProvider()).toBe("anthropic");
+  });
+
+  it("honours a provider's model env override across every task", () => {
+    process.env.OPENAI_API_KEY = "test";
+    process.env.OPENAI_MODEL = "gpt-test";
+    expect(new Set(Object.values(defaultModelSettings()).map((c) => c.model))).toEqual(
+      new Set(["gpt-test"]),
     );
   });
 
   it("falls back to whichever provider has a key", () => {
-    process.env.OPENAI_API_KEY = "test";
-    process.env.OPENAI_MODEL = "gpt-test";
-    const settings = defaultModelSettings();
-    expect(settings.tailor).toEqual({ provider: "openai", model: "gpt-test" });
-  });
-
-  it("prefers Anthropic when more than one key is set", () => {
-    process.env.ANTHROPIC_API_KEY = "test";
-    process.env.OPENAI_API_KEY = "test";
     process.env.GEMINI_API_KEY = "test";
-    expect(defaultModelSettings().tailor.provider).toBe("anthropic");
+    const settings = defaultModelSettings();
+    expect(settings.tailor.provider).toBe("google");
   });
 
   it("reports which providers are configured", () => {
@@ -221,9 +279,10 @@ describe("defaultModelSettings", () => {
     expect(PROVIDERS.google.isConfigured()).toBe(true);
   });
 
-  it("still produces settings when no key is set at all", () => {
+  it("still produces valid settings when no key is set at all", () => {
     const settings = defaultModelSettings();
-    expect(settings.tailor.provider).toBe("anthropic");
+    expect(settings.tailor.provider).toBe("openai");
+    expect(ModelSettingsSchema.safeParse(settings).success).toBe(true);
   });
 });
 
@@ -247,6 +306,7 @@ function fakeProvider(
     docsUrl: "https://example.com",
     isConfigured: () => true,
     defaultModel: () => "fake-default",
+    tiers: () => ({ cheap: "fake-cheap", balanced: "fake-balanced", best: "fake-best" }),
     curatedModels: [],
     listModels: async () => [],
     generateStructured: async (model, request) => {

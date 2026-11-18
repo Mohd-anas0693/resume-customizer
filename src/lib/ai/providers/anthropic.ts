@@ -1,5 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { jsonSchemaOutputFormat } from "@anthropic-ai/sdk/helpers/json-schema";
+import type AnthropicClient from "@anthropic-ai/sdk";
 import { toStrictJsonSchema } from "../json-schema";
 import {
   AiConfigError,
@@ -44,17 +43,28 @@ const CURATED: ModelInfo[] = [
   },
 ];
 
-let client: Anthropic | null = null;
+// The SDK is imported on first use, so a project that only uses another
+// provider never loads it.
+let clientPromise: Promise<AnthropicClient> | null = null;
 
-function getClient(): Anthropic {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+function apiKey(): string {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) {
     throw new AiConfigError(
-      "ANTHROPIC_API_KEY is not set. Add it to .env.local and restart the server.",
+      "ANTHROPIC_API_KEY is not set. Add it to .env.local and restart the server, or pick a different provider under AI models.",
     );
   }
-  if (!client) client = new Anthropic({ apiKey });
-  return client;
+  return key;
+}
+
+async function getClient(): Promise<AnthropicClient> {
+  const key = apiKey();
+  if (!clientPromise) {
+    clientPromise = import("@anthropic-ai/sdk").then(
+      ({ default: Anthropic }) => new Anthropic({ apiKey: key }),
+    );
+  }
+  return clientPromise;
 }
 
 export const anthropicProvider: AiProvider = {
@@ -64,10 +74,19 @@ export const anthropicProvider: AiProvider = {
   docsUrl: "https://console.anthropic.com/settings/keys",
   isConfigured: () => Boolean(process.env.ANTHROPIC_API_KEY),
   defaultModel: () => process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5",
+  tiers: () => {
+    const override = process.env.ANTHROPIC_MODEL;
+    return {
+      cheap: override || "claude-haiku-5-5",
+      balanced: override || "claude-sonnet-5-5",
+      best: override || "claude-opus-5-5",
+    };
+  },
   curatedModels: CURATED,
 
   async listModels() {
-    const page = await getClient().models.list({ limit: 50 });
+    const client = await getClient();
+    const page = await client.models.list({ limit: 50 });
     return page.data.map((m) => {
       const curated = CURATED.find((c) => c.id === m.id);
       return {
@@ -81,7 +100,8 @@ export const anthropicProvider: AiProvider = {
   },
 
   async generateStructured(model, request: StructuredRequest) {
-    const anthropic = getClient();
+    const anthropic = await getClient();
+    const { jsonSchemaOutputFormat } = await import("@anthropic-ai/sdk/helpers/json-schema");
 
     // The SDK applies its own strict transform; feed it the shape we already
     // normalised so all three providers see the same schema.

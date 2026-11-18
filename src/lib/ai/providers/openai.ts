@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import type OpenAIClient from "openai";
 import { toStrictJsonSchema } from "../json-schema";
 import {
   AiConfigError,
@@ -29,21 +29,31 @@ const EFFORT: Record<Effort, "low" | "medium" | "high" | "xhigh" | "max"> = {
   max: "max",
 };
 
-let client: OpenAI | null = null;
+// The SDK is imported on first use, so a project that only uses another
+// provider never loads it.
+let clientPromise: Promise<OpenAIClient> | null = null;
 
-function getClient(): OpenAI {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
+function apiKey(): string {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) {
     throw new AiConfigError(
-      "OPENAI_API_KEY is not set. Add it to .env.local and restart the server, or pick a different provider in Settings.",
+      "OPENAI_API_KEY is not set. Add it to .env.local and restart the server, or pick a different provider under AI models.",
     );
   }
-  if (!client) client = new OpenAI({ apiKey });
-  return client;
+  return key;
+}
+
+async function getClient(): Promise<OpenAIClient> {
+  const key = apiKey();
+  if (!clientPromise) {
+    clientPromise = import("openai").then(({ default: OpenAI }) => new OpenAI({ apiKey: key }));
+  }
+  return clientPromise;
 }
 
 /** Schema names must be a-z, A-Z, 0-9, underscore or dash. */
-const schemaName = (label: string) => label.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 64) || "result";
+const schemaName = (label: string) =>
+  label.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 64) || "result";
 
 export const openaiProvider: AiProvider = {
   id: "openai",
@@ -52,11 +62,20 @@ export const openaiProvider: AiProvider = {
   docsUrl: "https://platform.openai.com/api-keys",
   isConfigured: () => Boolean(process.env.OPENAI_API_KEY),
   defaultModel: () => process.env.OPENAI_MODEL || CURATED[0].id,
+  tiers: () => {
+    const override = process.env.OPENAI_MODEL;
+    return {
+      cheap: override || "gpt-5.5-mini",
+      balanced: override || "gpt-5.5-mini",
+      best: override || "gpt-5.5",
+    };
+  },
   curatedModels: CURATED,
 
   async listModels() {
+    const client = await getClient();
     const models: ModelInfo[] = [];
-    for await (const model of getClient().models.list()) {
+    for await (const model of client.models.list()) {
       // Audio, image and embedding models can't do structured text output.
       if (/embed|whisper|tts|dall-e|image|audio|moderation|realtime/i.test(model.id)) continue;
       models.push({ id: model.id, label: model.id });
@@ -65,14 +84,12 @@ export const openaiProvider: AiProvider = {
   },
 
   async generateStructured(model, request: StructuredRequest) {
-    const openai = getClient();
+    const openai = await getClient();
 
     const response = await openai.responses.create({
       model,
       instructions: request.system,
-      input: request.repair
-        ? `${request.userContent}\n\n${request.repair}`
-        : request.userContent,
+      input: request.repair ? `${request.userContent}\n\n${request.repair}` : request.userContent,
       max_output_tokens: request.maxTokens,
       reasoning: { effort: EFFORT[request.effort] },
       text: {

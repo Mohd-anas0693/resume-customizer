@@ -16,14 +16,19 @@ npm run db:push                   # creates prisma/dev.db
 npm run dev                       # http://localhost:3000
 ```
 
-`.env.local` — at least one provider key is needed for the AI steps:
+`.env.local` — **one** provider key is enough. OpenAI is the default; Claude and
+Gemini are optional alternatives:
 
 ```
-ANTHROPIC_API_KEY=sk-ant-...     # Anthropic (Claude), the default
-OPENAI_API_KEY=                  # optional
-GEMINI_API_KEY=                  # optional
+OPENAI_API_KEY=sk-...            # OpenAI (GPT), the default
+# ANTHROPIC_API_KEY=sk-ant-...   # Anthropic (Claude), optional
+# GEMINI_API_KEY=...             # Google (Gemini), optional
 DATABASE_URL="file:./dev.db"
 ```
+
+Comment out the providers you aren't using rather than leaving them assigned
+but empty: `FOO=` counts as "set to empty" and shadows the same variable in
+`.env`.
 
 The app works without any key for everything deterministic (scoring, editing,
 export); the AI routes return a clear 503 naming the provider and the variable
@@ -66,20 +71,32 @@ that is missing.
 
 ## Choosing AI models
 
-Three providers are supported — **Anthropic (Claude)**, **OpenAI (GPT)** and
-**Google (Gemini)** — and each of the four AI tasks can use a different one.
-Pick them under **AI models** in the nav (`/settings`):
+Three providers are supported — **OpenAI (GPT)**, **Anthropic (Claude)** and
+**Google (Gemini)**. None is required: set the key for whichever one you want
+and ignore the others. Each of the four AI tasks can use a different provider
+and model, chosen under **AI models** in the nav (`/settings`):
 
-| Task | What it does | Default |
+| Task | What it does | Model tier used |
 |---|---|---|
-| Resume parsing | Mechanical transcription into the schema | Claude Haiku 5.5 (cheapest) |
-| Job analysis | Keywords and requirements out of the JD | Claude Sonnet 5.5 |
-| Fit check | Blockers and transferable skills | Claude Sonnet 5.5 |
-| Tailoring | The rewriting itself | Claude Opus 5.5 (strongest) |
+| Resume parsing | Mechanical transcription into the schema | cheapest |
+| Job analysis | Keywords and requirements out of the JD | balanced |
+| Fit check | Blockers and transferable skills | balanced |
+| Tailoring | The rewriting itself | strongest |
 
-The defaults put the cheap model on the mechanical work and the strongest on
-tailoring. They adapt to whichever keys you have set, and `ANTHROPIC_MODEL` /
-`OPENAI_MODEL` / `GEMINI_MODEL` override them.
+Each provider supplies its own cheap/balanced/best ladder, so the defaults put a
+cheap model on the mechanical work and the strongest on tailoring whichever
+provider you use:
+
+| Provider | cheapest | balanced | strongest |
+|---|---|---|---|
+| OpenAI | `gpt-5.5-mini` | `gpt-5.5-mini` | `gpt-5.5` |
+| Anthropic | `claude-haiku-5-5` | `claude-sonnet-5-5` | `claude-opus-5-5` |
+| Google | `gemini-3-flash` | `gemini-3-flash` | `gemini-3-pro` |
+
+The defaults are built from the first provider that has a key, in the order
+OpenAI → Anthropic → Google. `PROVIDER_DEFAULT` changes that order, and
+`OPENAI_MODEL` / `ANTHROPIC_MODEL` / `GEMINI_MODEL` pin one model for every task
+on that provider.
 
 **Model lists are fetched from the provider, not hardcoded.** "Refresh model
 lists" on the settings page calls each provider's models endpoint and shows what
@@ -205,8 +222,10 @@ A few places where the build differs from `plan.md`, and why:
   with the same hand-written JSON schemas in `src/lib/tool-schemas.ts`. Every
   response is still validated with Zod and retried once with the validation
   error fed back, exactly as specified.
-- **Multiple providers.** The plan named Anthropic only; model choice across
-  Anthropic, OpenAI and Google was added afterwards. See "Choosing AI models".
+- **Multiple providers, none required.** The plan named Anthropic only; model
+  choice across OpenAI, Anthropic and Google was added afterwards, with OpenAI
+  as the default. Each provider's SDK is imported on first use, so a project
+  that only uses one never loads the other two. See "Choosing AI models".
 - **`unpdf` for PDF import**, which the plan allowed as the alternative to
   `pdf-parse`; it bundles cleanly under Next's server runtime.
 - **The fabrication post-check runs in code**, not as a second model call — the

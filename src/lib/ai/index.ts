@@ -16,6 +16,7 @@ export {
   configuredProviders,
   defaultModelSettings,
   getProvider,
+  preferredProvider,
   PROVIDER_IDS,
   PROVIDERS,
   TASK_HINT,

@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import type { GoogleGenAI as GoogleGenAIClient } from "@google/genai";
 import { toStrictJsonSchema } from "../json-schema";
 import {
   AiConfigError,
@@ -35,7 +35,9 @@ const THINKING_LEVEL: Record<Effort, string> = {
   max: "HIGH",
 };
 
-let client: GoogleGenAI | null = null;
+// The SDK is imported on first use, so a project that only uses another
+// provider never loads it.
+let clientPromise: Promise<GoogleGenAIClient> | null = null;
 
 function apiKey(): string {
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
@@ -47,10 +49,14 @@ function apiKey(): string {
   return key;
 }
 
-function getClient(): GoogleGenAI {
+async function getClient(): Promise<GoogleGenAIClient> {
   const key = apiKey();
-  if (!client) client = new GoogleGenAI({ apiKey: key });
-  return client;
+  if (!clientPromise) {
+    clientPromise = import("@google/genai").then(
+      ({ GoogleGenAI }) => new GoogleGenAI({ apiKey: key }),
+    );
+  }
+  return clientPromise;
 }
 
 /** Gemini returns ids as "models/gemini-...". The API accepts either form. */
@@ -63,10 +69,19 @@ export const googleProvider: AiProvider = {
   docsUrl: "https://aistudio.google.com/apikey",
   isConfigured: () => Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
   defaultModel: () => process.env.GEMINI_MODEL || CURATED[0].id,
+  tiers: () => {
+    const override = process.env.GEMINI_MODEL;
+    return {
+      cheap: override || "gemini-3-flash",
+      balanced: override || "gemini-3-flash",
+      best: override || "gemini-3-pro",
+    };
+  },
   curatedModels: CURATED,
 
   async listModels() {
-    const pager = await getClient().models.list();
+    const client = await getClient();
+    const pager = await client.models.list();
     const models: ModelInfo[] = [];
     for await (const model of pager) {
       const id = shortId(model.name ?? "");
@@ -81,7 +96,7 @@ export const googleProvider: AiProvider = {
   },
 
   async generateStructured(model, request: StructuredRequest) {
-    const genai = getClient();
+    const genai = await getClient();
 
     const response = await genai.models.generateContent({
       model: shortId(model),

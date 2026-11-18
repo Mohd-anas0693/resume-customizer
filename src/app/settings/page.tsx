@@ -91,15 +91,18 @@ export default function SettingsPage() {
   }
 
   const configuredCount = data.providers.filter((p) => p.configured).length;
+  // The provider the defaults are built from: the first configured one.
+  const preferred = data.providers.find((p) => p.configured)?.id ?? data.providers[0]?.id;
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <div>
         <h1 className="text-lg font-semibold">AI model settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Each of the four AI tasks can use a different provider and model. The deterministic
-          parts of the app — the keyword score, the fit verdict rules, the fabrication check and
-          the exports — run in code and are unaffected by what you choose here.
+          Each of the four AI tasks can use a different provider and model. Any one provider is
+          enough — set the key for whichever you want and ignore the rest. The deterministic parts
+          of the app — the keyword score, the fit verdict rules, the fabrication check and the
+          exports — run in code and are unaffected by what you choose here.
         </p>
       </div>
 
@@ -117,8 +120,9 @@ export default function SettingsPage() {
               {p.configured ? (
                 <Badge tone="green">key set</Badge>
               ) : (
-                <Badge tone="amber">no key</Badge>
+                <Badge>optional</Badge>
               )}
+              {p.id === preferred ? <Badge tone="blue">default</Badge> : null}
               <code className="rounded bg-muted px-1 py-0.5 text-[11px]">{p.envVar}</code>
               {p.liveModels ? (
                 <span className="text-[11px] text-muted-foreground">
@@ -142,7 +146,8 @@ export default function SettingsPage() {
           ))}
           {configuredCount === 0 ? (
             <p className="pt-1 text-sm text-amber-700 dark:text-amber-400">
-              No provider keys are set, so the AI steps can&apos;t run. Add at least one key to
+              No provider keys are set, so the AI steps can&apos;t run. You only need one — add
+              any single key to
               <code className="mx-1 rounded bg-muted px-1 py-0.5 text-[11px]">.env.local</code>
               and restart the server.
             </p>

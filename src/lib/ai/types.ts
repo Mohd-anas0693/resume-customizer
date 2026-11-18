@@ -62,6 +62,11 @@ export type AiProvider = {
   isConfigured: () => boolean;
   /** Fallback model when the user has not chosen one. */
   defaultModel: () => string;
+  /**
+   * This provider's cheap/balanced/best ladder, used to build sensible
+   * per-task defaults. An env override (e.g. OPENAI_MODEL) wins over all three.
+   */
+  tiers: () => { cheap: string; balanced: string; best: string };
   /** Models we can describe without calling the provider. */
   curatedModels: ModelInfo[];
   /** Ask the provider which models this key can actually use. */

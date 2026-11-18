@@ -72,7 +72,7 @@ export function ModelPicker({
           {providers.map((p) => (
             <option key={p.id} value={p.id}>
               {p.label}
-              {p.configured ? "" : " — no key"}
+              {p.configured ? "" : " — key not set"}
             </option>
           ))}
         </select>
